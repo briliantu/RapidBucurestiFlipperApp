@@ -1,0 +1,15 @@
+App(
+    appid="rapid_flipper_app",
+    name="RapidFlipperApp",
+    apptype=FlipperAppType.EXTERNAL,
+    entry_point="rapid_flipper_app",
+    cdefines=["APP_RAPID_FLIPPER"],
+    requires=["gui"],
+    stack_size=2 * 1024,
+    fap_category="Media",
+    fap_icon="icon.png",
+    fap_icon_assets="images",
+    fap_version="0.1",
+    fap_description="Player de melodii pe buzzer-ul Flipper, fanfara placeholder inclusa",
+    fap_author="Raul",
+)

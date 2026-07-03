@@ -1,0 +1,266 @@
+/*
+ * RapidFlipperApp - canta melodii pe buzzer-ul intern al Flipper Zero
+ *
+ * IMPORTANT despre melodie:
+ *   Imnul Rapidului (versuri Adrian Paunescu, muzica Victor Socaciu, 1979)
+ *   este o compozitie cu autor, protejata prin drepturi de autor - nu am
+ *   inclus transcrierea ei exacta nota-cu-nota.
+ *
+ *   Mai jos e o fanfara scurta, generica, compusa de mine ca placeholder,
+ *   plus tot motorul de redare (frecvente + durate). Daca vrei sa canti
+ *   chiar imnul, inlocuieste array-ul MELODY[] cu propria transcriere
+ *   (din ureche sau dupa o partitura pe care o ai) - structura ramane
+ *   identica: fiecare element e {frecventa_Hz, durata_ms}.
+ *
+ * Control buzzer: furi_hal_speaker_* (acquire / start / stop / release)
+ *
+ * Compilare: din folderul aplicatiei -> ufbt / ufbt launch
+ */
+
+#include <furi.h>
+#include <furi_hal.h>
+#include <furi_hal_speaker.h>
+#include <gui/gui.h>
+#include <input/input.h>
+
+/* ---------------- Note muzicale (frecvente in Hz) ---------------- */
+
+#define NOTE_C4  262
+#define NOTE_D4  294
+#define NOTE_E4  330
+#define NOTE_F4  349
+#define NOTE_G4  392
+#define NOTE_A4  440
+#define NOTE_B4  494
+#define NOTE_C5  523
+#define NOTE_D5  587
+#define NOTE_E5  659
+#define NOTE_F5  698
+#define NOTE_G5  784
+#define NOTE_A5  880
+#define REST     0
+
+typedef struct {
+    uint16_t frequency; // 0 = pauza
+    uint16_t duration_ms;
+} Note;
+
+/*
+ * Placeholder: fanfara scurta compusa de mine, gen "victorie pe stadion".
+ * Inlocuieste continutul array-ului cu propria melodie daca vrei.
+ */
+static const Note MELODY[] = {
+    {NOTE_C5, 150}, {NOTE_C5, 150}, {NOTE_C5, 150}, {NOTE_G4, 300},
+    {REST, 60},
+    {NOTE_A4, 150}, {NOTE_A4, 150}, {NOTE_A4, 150}, {NOTE_C5, 300},
+    {REST, 60},
+    {NOTE_D5, 200}, {NOTE_C5, 200}, {NOTE_B4, 200}, {NOTE_A4, 200},
+    {NOTE_G4, 400},
+    {REST, 100},
+    {NOTE_G4, 150}, {NOTE_A4, 150}, {NOTE_B4, 150}, {NOTE_C5, 150},
+    {NOTE_D5, 500},
+};
+#define MELODY_LEN (sizeof(MELODY) / sizeof(MELODY[0]))
+
+typedef enum {
+    ScreenMenu,
+    ScreenPlaying,
+    ScreenAbout,
+} AppScreen;
+
+typedef struct {
+    FuriMutex* mutex;
+    AppScreen screen;
+    int menu_index;
+    int current_note; // index nota curenta, -1 = oprit
+    bool stop_requested;
+} AppState;
+
+static const char* menu_items[] = {
+    "1. Canta fanfara",
+    "2. Despre",
+};
+#define MENU_ITEMS_COUNT (sizeof(menu_items) / sizeof(menu_items[0]))
+
+/* ---------------- Redare melodie (blocant, thread separat) ---------------- */
+
+static int32_t play_melody_thread(void* ctx) {
+    AppState* app = ctx;
+
+    if(!furi_hal_speaker_acquire(1000)) {
+        return -1;
+    }
+
+    for(size_t i = 0; i < MELODY_LEN; i++) {
+        furi_mutex_acquire(app->mutex, FuriWaitForever);
+        bool stop = app->stop_requested;
+        app->current_note = (int)i;
+        furi_mutex_release(app->mutex);
+
+        if(stop) break;
+
+        if(MELODY[i].frequency > 0) {
+            furi_hal_speaker_start((float)MELODY[i].frequency, 1.0f);
+            furi_delay_ms(MELODY[i].duration_ms);
+            furi_hal_speaker_stop();
+        } else {
+            furi_delay_ms(MELODY[i].duration_ms);
+        }
+        // scurta pauza intre note pentru claritate
+        furi_delay_ms(20);
+    }
+
+    furi_hal_speaker_stop();
+    furi_hal_speaker_release();
+
+    furi_mutex_acquire(app->mutex, FuriWaitForever);
+    app->current_note = -1;
+    app->screen = ScreenMenu;
+    furi_mutex_release(app->mutex);
+
+    return 0;
+}
+
+/* ---------------- Draw callback ---------------- */
+
+static void draw_callback(Canvas* canvas, void* ctx) {
+    AppState* app = ctx;
+    furi_mutex_acquire(app->mutex, FuriWaitForever);
+
+    canvas_clear(canvas);
+
+    switch(app->screen) {
+    case ScreenMenu:
+        canvas_set_font(canvas, FontPrimary);
+        canvas_draw_str(canvas, 2, 10, "RapidFlipperApp");
+        canvas_set_font(canvas, FontSecondary);
+        for(size_t i = 0; i < MENU_ITEMS_COUNT; i++) {
+            if((int)i == app->menu_index) {
+                canvas_draw_str(canvas, 2, 24 + i * 10, ">");
+            }
+            canvas_draw_str(canvas, 10, 24 + i * 10, menu_items[i]);
+        }
+        break;
+
+    case ScreenPlaying: {
+        canvas_set_font(canvas, FontPrimary);
+        canvas_draw_str(canvas, 2, 10, "Se canta...");
+        canvas_set_font(canvas, FontSecondary);
+        char buf[32];
+        snprintf(buf, sizeof(buf), "Nota %d / %d", app->current_note + 1, (int)MELODY_LEN);
+        canvas_draw_str(canvas, 2, 28, buf);
+        canvas_draw_str(canvas, 2, 45, "Back = opreste");
+        break;
+    }
+
+    case ScreenAbout:
+        canvas_set_font(canvas, FontPrimary);
+        canvas_draw_str(canvas, 2, 10, "Despre");
+        canvas_set_font(canvas, FontSecondary);
+        canvas_draw_str(canvas, 2, 25, "RapidFlipperApp v0.1");
+        canvas_draw_str(canvas, 2, 37, "Fanfara placeholder,");
+        canvas_draw_str(canvas, 2, 49, "inlocuieste MELODY[]");
+        canvas_draw_str(canvas, 2, 61, "Back = meniu");
+        break;
+    }
+
+    furi_mutex_release(app->mutex);
+}
+
+/* ---------------- Input callback ---------------- */
+
+static void input_callback(InputEvent* input_event, void* ctx) {
+    FuriMessageQueue* queue = ctx;
+    furi_message_queue_put(queue, input_event, FuriWaitForever);
+}
+
+/* ---------------- Main ---------------- */
+
+int32_t rapid_flipper_app(void* p) {
+    UNUSED(p);
+
+    AppState* app = malloc(sizeof(AppState));
+    app->mutex = furi_mutex_alloc(FuriMutexTypeNormal);
+    app->screen = ScreenMenu;
+    app->menu_index = 0;
+    app->current_note = -1;
+    app->stop_requested = false;
+
+    FuriMessageQueue* event_queue = furi_message_queue_alloc(8, sizeof(InputEvent));
+
+    ViewPort* view_port = view_port_alloc();
+    view_port_draw_callback_set(view_port, draw_callback, app);
+    view_port_input_callback_set(view_port, input_callback, event_queue);
+
+    Gui* gui = furi_record_open(RECORD_GUI);
+    gui_add_view_port(gui, view_port, GuiLayerFullscreen);
+
+    FuriThread* music_thread = NULL;
+
+    InputEvent event;
+    bool running = true;
+
+    while(running) {
+        FuriStatus status = furi_message_queue_get(event_queue, &event, 100);
+
+        if(status == FuriStatusOk &&
+           (event.type == InputTypePress || event.type == InputTypeRepeat)) {
+            furi_mutex_acquire(app->mutex, FuriWaitForever);
+
+            if(event.key == InputKeyBack) {
+                if(app->screen == ScreenMenu) {
+                    running = false;
+                } else if(app->screen == ScreenPlaying) {
+                    app->stop_requested = true;
+                } else {
+                    app->screen = ScreenMenu;
+                }
+            } else if(app->screen == ScreenMenu) {
+                if(event.key == InputKeyUp) {
+                    app->menu_index = (app->menu_index - 1 + MENU_ITEMS_COUNT) % MENU_ITEMS_COUNT;
+                } else if(event.key == InputKeyDown) {
+                    app->menu_index = (app->menu_index + 1) % MENU_ITEMS_COUNT;
+                } else if(event.key == InputKeyOk) {
+                    if(app->menu_index == 0) {
+                        app->screen = ScreenPlaying;
+                        app->stop_requested = false;
+                        app->current_note = 0;
+                        if(music_thread) {
+                            furi_thread_join(music_thread);
+                            furi_thread_free(music_thread);
+                        }
+                        music_thread = furi_thread_alloc();
+                        furi_thread_set_name(music_thread, "RapidMelody");
+                        furi_thread_set_stack_size(music_thread, 1024);
+                        furi_thread_set_context(music_thread, app);
+                        furi_thread_set_callback(music_thread, play_melody_thread);
+                        furi_thread_start(music_thread);
+                    } else if(app->menu_index == 1) {
+                        app->screen = ScreenAbout;
+                    }
+                }
+            }
+
+            furi_mutex_release(app->mutex);
+        }
+
+        view_port_update(view_port);
+    }
+
+    if(music_thread) {
+        furi_mutex_acquire(app->mutex, FuriWaitForever);
+        app->stop_requested = true;
+        furi_mutex_release(app->mutex);
+        furi_thread_join(music_thread);
+        furi_thread_free(music_thread);
+    }
+
+    gui_remove_view_port(gui, view_port);
+    furi_record_close(RECORD_GUI);
+    view_port_free(view_port);
+    furi_message_queue_free(event_queue);
+    furi_mutex_free(app->mutex);
+    free(app);
+
+    return 0;
+}
