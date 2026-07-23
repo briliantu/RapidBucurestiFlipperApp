@@ -1,6 +1,36 @@
-# RapidFlipperApp
+# 🏁 Rapid Flipper App
 
-Aplicație de „fun" pentru Flipper Zero care cântă o melodie pe buzzer-ul intern, cu redare pe thread separat (UI-ul rămâne responsiv în timp ce cântă).
+O aplicație custom creată pentru **Flipper Zero** dedicată suporterilor **FC Rapid București**. Aplicația include grafică Pixel Art (128x64), meniu interactiv, scandări text și un motor dedicat redării liniei melodice pe buzzer-ul intern (piezo speaker).
+
+---
+
+## 🚀 Caracteristici (Features)
+
+* **🖼️ HomeScreen Pixel Art (128x64):** Sigla oficială, acvila și delfinul din Giulești convertite fidel în format XBM monocrom pe tot ecranul Flipper-ului.
+* **🎵 Meniu Cântece & Scandări:** Sub-meniu dedicat cu 8 piese/repertorii de peluză adaptate pentru buzzer-ul hardware:
+  1. *Imnul Rapidului* (Victor Socaciu)
+  2. *În 1923 s-a născut un mit*
+  3. *Gândul ce mereu îl port*
+  4. *Samba din Giulești*
+  5. *C-așa sunt eu rapidist*
+  6. *Prima oară pe Giulești*
+  7. *Haide Rapidul, Haide Realul*
+  8. *Olé, olé, mulțumim Rapidule!*
+* **🔥 Ecrane dedicate Peluza Nord:** Meniu interactiv cu scandările clasice de rivalitate (*Anti Steaua, Anti Dinamo, Anti FCSB*).
+* **🎮 Navigare fluidă:** Scrolling automat în meniuri și control facil din D-Pad + butonul Back.
+* **⚡ Multithreading curat:** Redarea muzicală rulează pe un thread separat, protejat prin Mutex-uri pentru a preveni blocarea interfeței grafice (UI).
+
+---
+
+## 📂 Structura Proiectului
+
+```text
+RapidBucurestiFlipperApp/
+├── application.fam       # Manifestul aplicatiei pentru FBT/uFBT
+├── rapid_flipper_app.c   # Codul sursa principal (UI, Audio Engine, XBM Graphics)
+├── icon.png              # Iconita aplicatiei (10x10 pixel art 'R')
+└── README.md             # Documentatia proiectului
+
 
 ## ⚠️ Notă despre melodie
 
