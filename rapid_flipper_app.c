@@ -298,6 +298,21 @@ static int32_t play_melody_thread(void* ctx) {
 
 /* ---------------- Draw callback ---------------- */
 
+static void draw_menu_header(Canvas* canvas, const char* title, const char* subtitle) {
+    canvas_set_font(canvas, FontPrimary);
+    canvas_draw_str(canvas, 2, 2, title);
+    canvas_set_font(canvas, FontSecondary);
+    if(subtitle) {
+        canvas_draw_str(canvas, 2, 12, subtitle);
+    }
+    canvas_draw_str(canvas, 2, 22, "--------------------");
+}
+
+static void draw_menu_footer(Canvas* canvas, const char* footer) {
+    canvas_set_font(canvas, FontSecondary);
+    canvas_draw_str(canvas, 2, 56, footer);
+}
+
 static void draw_callback(Canvas* canvas, void* ctx) {
     AppState* app = ctx;
     furi_mutex_acquire(app->mutex, FuriWaitForever);
@@ -310,8 +325,7 @@ static void draw_callback(Canvas* canvas, void* ctx) {
         break;
 
     case ScreenMenuMain: {
-        canvas_set_font(canvas, FontPrimary);
-        canvas_draw_str(canvas, 2, 10, "FC Rapid Bucuresti");
+        draw_menu_header(canvas, "RAPID FLIPPER MENU", "Alegeti o optiune:");
         canvas_set_font(canvas, FontSecondary);
 
         size_t start_item = 0;
@@ -323,16 +337,22 @@ static void draw_callback(Canvas* canvas, void* ctx) {
             int y_pos = 24 + (int)(i - start_item) * 10;
             if((int)i == app->menu_main_index) {
                 canvas_draw_str(canvas, 2, y_pos, ">");
+                canvas_draw_str(canvas, 106, y_pos, "<");
+            } else {
+                canvas_draw_str(canvas, 2, y_pos, " ");
             }
             canvas_draw_str(canvas, 10, y_pos, main_menu_items[i]);
         }
+
+        draw_menu_footer(canvas, "Up/Down=Nav  OK=Select");
         break;
     }
 
     case ScreenMenuSongs: {
-        canvas_set_font(canvas, FontPrimary);
-        canvas_draw_str(canvas, 2, 10, "Alege Melodia:");
+        draw_menu_header(canvas, "RAPID SONGS", "Melodii din Giulesti");
         canvas_set_font(canvas, FontSecondary);
+        canvas_draw_str(canvas, 90, 8, "* * *");
+        canvas_draw_str(canvas, 90, 18, " * * ");
 
         size_t start_item = 0;
         if(app->menu_songs_index >= 4) {
@@ -343,56 +363,78 @@ static void draw_callback(Canvas* canvas, void* ctx) {
             int y_pos = 24 + (int)(i - start_item) * 10;
             if((int)i == app->menu_songs_index) {
                 canvas_draw_str(canvas, 2, y_pos, ">");
+                canvas_draw_str(canvas, 106, y_pos, "<");
+            } else {
+                canvas_draw_str(canvas, 2, y_pos, " ");
             }
             canvas_draw_str(canvas, 10, y_pos, SONGS[i].name);
         }
+
+        draw_menu_footer(canvas, "Back=Inapoi  OK=Canta");
         break;
     }
 
     case ScreenPlaying: {
         canvas_set_font(canvas, FontPrimary);
-        if(app->selected_song >= 0 && app->selected_song < (int)SONGS_COUNT) {
-            canvas_draw_str(canvas, 2, 12, SONGS[app->selected_song].name);
-        } else {
-            canvas_draw_str(canvas, 2, 12, "Se canta...");
-        }
+        canvas_draw_str(canvas, 2, 2, "Now Playing");
         canvas_set_font(canvas, FontSecondary);
-        char buf[32];
+        if(app->selected_song >= 0 && app->selected_song < (int)SONGS_COUNT) {
+            canvas_draw_str(canvas, 2, 16, SONGS[app->selected_song].name);
+        } else {
+            canvas_draw_str(canvas, 2, 16, "Se canta...");
+        }
+
         int total_notes = (app->selected_song >= 0 && app->selected_song < (int)SONGS_COUNT) ?
                               (int)SONGS[app->selected_song].length :
                               0;
+        int progress_steps = total_notes > 0 ? ((app->current_note + 1) * 10 / total_notes) : 0;
+        if(progress_steps < 0) progress_steps = 0;
+        if(progress_steps > 10) progress_steps = 10;
+
+        char progress[16] = "[          ]";
+        for(int i = 0; i < progress_steps; i++) {
+            progress[1 + i] = '#';
+        }
+        canvas_draw_str(canvas, 2, 32, progress);
+
+        char buf[32];
         snprintf(buf, sizeof(buf), "Nota: %d / %d", app->current_note + 1, total_notes);
-        canvas_draw_str(canvas, 2, 32, buf);
-        canvas_draw_str(canvas, 2, 52, "Apasa Back = Stop");
+        canvas_draw_str(canvas, 2, 44, buf);
+        canvas_draw_str(canvas, 2, 56, "Back = Stop");
         break;
     }
 
     case ScreenSteaua:
         canvas_set_font(canvas, FontPrimary);
-        canvas_draw_str(canvas, 2, 10, "MUIE STEAUA HEY HEY!");
+        canvas_draw_str(canvas, 2, 2, "ANTI STEAUA");
         canvas_set_font(canvas, FontSecondary);
-        canvas_draw_str(canvas, 2, 23, "In padurea cu alune");
-        canvas_draw_str(canvas, 2, 33, "Aveau casa doi pitici");
-        canvas_draw_str(canvas, 2, 43, "Vine pupaza si spune:");
-        canvas_draw_str(canvas, 2, 53, "MUIE STEAUA MUIE STEAUA");
+        canvas_draw_str(canvas, 2, 14, "--------------------");
+        canvas_draw_str(canvas, 2, 24, "MUIE STEAUA HEY HEY!");
+        canvas_draw_str(canvas, 2, 36, "In padurea cu alune");
+        canvas_draw_str(canvas, 2, 46, "Aveau casa doi pitici");
+        canvas_draw_str(canvas, 2, 56, "MUIE STEAUA MUIE STEAUA");
         break;
 
     case ScreenDinamo:
         canvas_set_font(canvas, FontPrimary);
-        canvas_draw_str(canvas, 2, 10, "Caini spurcati...");
+        canvas_draw_str(canvas, 2, 2, "ANTI DINAMO");
         canvas_set_font(canvas, FontSecondary);
-        canvas_draw_str(canvas, 2, 23, "de pula sa ne luati!");
-        canvas_draw_str(canvas, 2, 38, "Ce rusine sa fii caine,");
-        canvas_draw_str(canvas, 2, 50, "sa se pise toti pe tine!");
+        canvas_draw_str(canvas, 2, 14, "--------------------");
+        canvas_draw_str(canvas, 2, 24, "Caini spurcati...");
+        canvas_draw_str(canvas, 2, 34, "de pula sa ne luati!");
+        canvas_draw_str(canvas, 2, 46, "Ce rusine sa fii caine,");
+        canvas_draw_str(canvas, 2, 56, "sa se pise toti pe tine!");
         break;
 
     case ScreenFCSB:
         canvas_set_font(canvas, FontPrimary);
-        canvas_draw_str(canvas, 2, 12, "FCSB NU E STEAUA!");
+        canvas_draw_str(canvas, 2, 2, "ANTI FCSB");
         canvas_set_font(canvas, FontSecondary);
-        canvas_draw_str(canvas, 2, 30, "CSA FCSB");
+        canvas_draw_str(canvas, 2, 14, "--------------------");
+        canvas_draw_str(canvas, 2, 24, "FCSB NU E STEAUA!");
+        canvas_draw_str(canvas, 2, 34, "CSA FCSB");
         canvas_draw_str(canvas, 2, 44, "ACEEASI MIZERIE!");
-        canvas_draw_str(canvas, 2, 58, "Back = Inapoi");
+        canvas_draw_str(canvas, 2, 56, "Back = Inapoi");
         break;
     }
 
